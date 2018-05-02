@@ -1,0 +1,24 @@
+{
+  "name": "create-appleid",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "start": "node ./bin/www",
+    "server" : "java -jar /Users/Abunuo/Downloads/senium-server-standalone-3.0.1.jar",
+    "chromeDriver": "node apple-signup.js -Dwebdriver.chrome.driver=/Users/Abunuo/Downloads/chromedriver",
+    "chromeDriver2": "node --harmony-async-await apple-signup2.js -Dwebdriver.chrome.driver=/Users/Abunuo/Downloads/chromedriver"
+  },
+  "dependencies": {
+    "deathbycaptcha2": "^1.0.0",
+    "imap": "^0.8.19",
+    "lodash": "^4.17.4",
+    "log4js": "^1.1.1",
+    "mail-listener2": "^0.3.1",
+    "mailin": "^3.0.4",
+    "mailparser": "^2.0.1",
+    "request": "^2.79.0",
+    "request-promise": "^4.1.1",
+    "selenium-webdriver": "^3.0.1",
+    "uuid": "^3.0.1"
+  }
+}

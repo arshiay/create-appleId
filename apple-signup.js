@@ -1,0 +1,279 @@
+var fs = require("fs"),
+    path = require("path"),
+    webdriver = require('selenium-webdriver'),
+    By = webdriver.By,
+    until = webdriver.until,
+    parseCaptcha = require('./parseCaptcha'),
+    decodeCaptcha = require('./decodeCaptcha'),
+    getMail = require("./getMail"),
+    path = require('path'),
+    uuidV1 = require('uuid/v1'),
+    generatePassword = require("./generatePassword"),
+    generateLastName = require("./generateLastName"),
+    generateName = require("./generateName"),
+    generateAnswer = require("./generateAnswer"),
+    generateBirthYear = require("./generateBirthYear"),
+    generateBirthMonth = require("./generateBirthMonth"),
+    generateBirthDay = require("./generateBirthDay"),
+    generateHost = require("./generateHost"),
+    getEmailData = require("./getEmailData"),
+    saveAppleId = require("./saveAppleId"),
+    log4js = require("log4js");
+
+log4js.loadAppender('file');
+log4js.addAppender(log4js.appenders.file('logs/log.log'), 'normal');
+var logger = log4js.getLogger("normal");
+
+/*var emailDataString = fs.readFileSync(path.join(__dirname, "./email_datas/email.json"), "utf-8");
+var emailDatas = JSON.parse(emailDataString);
+var emailData = emailDatas.pop();*/
+
+var timeouts = {
+    WAIT_FOR_CREATE_PAGE_VISIT: 10000,
+    VISIT_CREATE_PAGE_TIMEOUT: 20000,
+    WAIT_FOR_EMAIL_CODE_VERIFY_DIALOG_TIMEOUT: 40000,
+    WAIT_FOR_GET_EMAIL_CODE_TIMEOUT: 60000,
+    WAIT_FOR_EMAIL_CODE_VERIFY_DIALOG_CONTINUE_BUTTON: 5000,
+    WAIT_FOR_CREATE_SUCCESS_PAGE_VISIT: 10000,
+    WAIT_FOR_CREATE_SUCCESS_PAGE_TIMEOUT: 30000
+};
+
+var createPageUrl = "https://appleid.apple.com/account";
+var locale = 'zh'; // zh,en
+
+function wait(timeout) {
+    return new Promise(function(resolve, reject) {
+        setTimeout(function() {
+            resolve(true);
+        }, timeout);
+    });
+}
+
+function saveData(data) {
+    saveAppleId({
+        appleId: data.email,
+        password: data.password,
+        lastName: data.lastName,
+        firstName: data.firstName,
+        q1: "你少年时代最好的朋友叫什么名字？",
+        a1: data.answer0,
+        q2: "你的理想工作是什么？",
+        a2: data.answer1,
+        q3: "你的父母是在哪里认识的？",
+        a3: data.answer2,
+        birthDate: data.birthYear.toString() + "-" + data.birthMonth.toString() + "-" + data.birthDay.toString(),
+        country: data.country
+    });
+}
+
+var driver = new webdriver.Builder()
+    .forBrowser('chrome')
+    .usingServer('http://localhost:4444/wd/hub')
+    .build();
+
+function createAppleId() {
+    driver.get(createPageUrl).then(function() {
+        wait(timeouts.WAIT_FOR_CREATE_PAGE_VISIT).then(function() {
+            driver.wait(until.elementLocated(By.css(".idms-captcha-wrapper")), timeouts.VISIT_CREATE_PAGE_TIMEOUT).then(function(elem) {
+                getEmailData().then(function(emailData) {
+                    var password = generatePassword();
+                    var data = {
+                        url: 'https://appleid.apple.com/account',
+                        email: emailData.email,
+                        emailPassword: emailData.password,
+                        emailHost: generateHost(emailData.email),
+                        password: password,
+                        confirmPassword: password,
+                        lastName: generateLastName(),
+                        firstName: generateName(),
+                        birthYear: generateBirthYear(),
+                        birthMonth: generateBirthMonth(),
+                        birthDay: generateBirthDay(),
+                        question0: 130, //130~135
+                        answer0: generateAnswer(),
+                        question1: 136, //136~141
+                        answer1: generateAnswer(),
+                        question2: 142, //142~147
+                        answer2: generateAnswer(),
+                        countryCode: 'CHN', //CHN-中国, THA-泰国
+                        country: "中国"
+                    };
+                    var birthdayString;
+                    switch (locale) {
+                        case "en":
+                            birthdayString = data.birthMonth.toString() + data.birthDay.toString() + data.birthYear.toString() ;
+                            break;
+                        default:
+                            birthdayString = data.birthYear.toString() + data.birthMonth.toString() + data.birthDay.toString()
+                    }
+                    logger.info("准备生成的Apple Id信息:" + JSON.stringify(data));
+                    driver.findElement(By.css("input[type='email']")).sendKeys(data.email).catch(function(error) {
+                        logger.error(error);
+                        createAppleId();
+                    });
+                    driver.findElement(By.id("password")).sendKeys(data.password).catch(function(error) {
+                        logger.error(error);
+                        createAppleId();
+                    });
+                    driver.findElement(By.css("input[id^='confirm-password-input']")).sendKeys(data.confirmPassword).catch(function(error) {
+                        logger.error(error);
+                        createAppleId();
+                    });
+                    driver.findElement(By.xpath("//last-name-input//div[@class='name-input']//input")).sendKeys(data.lastName).catch(function(error) {
+                        logger.error(error);
+                        createAppleId();
+                    });
+                    driver.findElement(By.xpath("//first-name-input//div[@class='name-input']//input")).sendKeys(data.firstName).catch(function(error) {
+                        logger.error(error);
+                        createAppleId();
+                    });
+                    driver.findElement(By.css("input[class*='birthday-field']")).clear().catch(function(error) {
+                        logger.error(error);
+                        createAppleId();
+                    });
+                    driver.findElement(By.css("input[class*='birthday-field']")).sendKeys(birthdayString).catch(function(error) {
+                        logger.error(error);
+                        createAppleId();
+                    });
+                    driver.findElement(By.css("div[class*=qa-set0] select")).click().catch(function(error) {
+                        logger.error(error);
+                        createAppleId();
+                    });
+                    driver.findElement(By.css("div[class*=qa-set0] select option[value='" + data.question0 + "']")).click().catch(function(error) {
+                        logger.error(error);
+                        createAppleId();
+                    });
+                    driver.findElement(By.css("div[class*=qa-set0] div[class*='security-answer'] input")).sendKeys(data.answer0).catch(function(error) {
+                        logger.error(error);
+                        createAppleId();
+                    });
+                    driver.findElement(By.css("div[class*=qa-set1] select")).click().catch(function(error) {
+                        logger.error(error);
+                        createAppleId();
+                    });
+                    driver.findElement(By.css("div[class*=qa-set1] select option[value='" + data.question1 + "']")).click().catch(function(error) {
+                        logger.error(error);
+                        createAppleId();
+                    });
+                    driver.findElement(By.css("div[class*=qa-set1] div[class*='security-answer'] input")).sendKeys(data.answer1).catch(function(error) {
+                        logger.error(error);
+                        createAppleId();
+                    });
+                    driver.findElement(By.css("div[class*=qa-set2] select")).click().catch(function(error) {
+                        logger.error(error);
+                        createAppleId();
+                    });
+                    driver.findElement(By.css("div[class*=qa-set2] select option[value='" + data.question2 + "']")).click().catch(function(error) {
+                        logger.error(error);
+                        createAppleId();
+                    });
+                    driver.findElement(By.css("div[class*=qa-set2] div[class*='security-answer'] input")).sendKeys(data.answer2).catch(function(error) {
+                        logger.error(error);
+                        createAppleId();
+                    });
+                    driver.findElement(By.id("countryOptions")).click().catch(function(error) {
+                        logger.error(error);
+                        createAppleId();
+                    });
+                    driver.findElement(By.css("select#countryOptions option[value='" + data.countryCode + "']")).click().catch(function(error) {
+                        logger.error(error);
+                        createAppleId();
+                    });
+                    driver.findElement(By.css("div[class='idms-captcha-wrapper'] img")).getAttribute("src").then(function(base64Img) {
+                        var imgName = uuidV1().replace(/\-/g, '');
+                        return parseCaptcha(base64Img, imgName);
+                    }).then(function(filePath) {
+                        return decodeCaptcha(filePath);
+                    }).then(function(captcha) {
+                        logger.info("解析得到验证码：" + captcha);
+                        driver.findElement(By.css("div.captcha-input input")).sendKeys(captcha).catch(function(error) {
+                            logger.error(error);
+                            createAppleId();
+                        });
+                        driver.findElement(By.css("button.button.button-primary.last.nav-action")).click().catch(function(error) {
+                            logger.error(error);
+                            createAppleId();
+                        });
+                        driver.wait(until.elementLocated(By.id("char0")), timeouts.WAIT_FOR_EMAIL_CODE_VERIFY_DIALOG_TIMEOUT).then(function(elem) {
+                            wait(timeouts.WAIT_FOR_GET_EMAIL_CODE_TIMEOUT).then(function() {
+                                getMail({
+                                    user: data.email,
+                                    password: data.emailPassword,
+                                    host: data.emailHost,
+                                    port: 993,
+                                    tls: true
+                                }).then(function(mailCode) {
+                                    logger.info("收到邮件验证码：" + mailCode);
+                                    driver.findElement(By.id("char0")).sendKeys(mailCode[0]).catch(function(error) {
+                                        logger.error(error);
+                                        createAppleId();
+                                    });
+                                    driver.findElement(By.id("char1")).sendKeys(mailCode[1]).catch(function(error) {
+                                        logger.error(error);
+                                        createAppleId();
+                                    });
+                                    driver.findElement(By.id("char2")).sendKeys(mailCode[2]).catch(function(error) {
+                                        logger.error(error);
+                                        createAppleId();
+                                    });
+                                    driver.findElement(By.id("char3")).sendKeys(mailCode[3]).catch(function(error) {
+                                        logger.error(error);
+                                        createAppleId();
+                                    });
+                                    driver.findElement(By.id("char4")).sendKeys(mailCode[4]).catch(function(error) {
+                                        logger.error(error);
+                                        createAppleId();
+                                    });
+                                    driver.findElement(By.id("char5")).sendKeys(mailCode[5]).catch(function(error) {
+                                        logger.error(error);
+                                        createAppleId();
+                                    });
+                                    wait(timeouts.WAIT_FOR_EMAIL_CODE_VERIFY_DIALOG_CONTINUE_BUTTON).then(function() {
+                                        driver.findElement(By.css("div.idms-modal-dialog button.button.button-link.last.nav-action")).click().catch(function(error) {
+                                            logger.error(error);
+                                            createAppleId();
+                                        });
+                                        wait(timeouts.WAIT_FOR_CREATE_SUCCESS_PAGE_VISIT).then(function() {
+                                            driver.wait(until.urlContains("appleid.apple.com/account/manage"), timeouts.WAIT_FOR_CREATE_SUCCESS_PAGE_TIMEOUT).then(function () {
+                                                logger.info("Apple ID申请成功:" + JSON.stringify(data));
+                                                saveData(data);
+                                                createAppleId();
+                                            }).catch(function(err) {
+                                                logger.error("等待成功页面超时");
+                                                logger.error(err);
+                                                createAppleId();
+                                            });
+                                        });
+                                    });
+                                }).catch(function(err) {
+                                    logger.error("申请Apple ID失败，失败原因：获取邮件验证码失败");
+                                    createAppleId();
+                                });
+                            });
+                        }).catch(function(err) {
+                            logger.error("申请Apple ID失败,失败原因：图片验证码错误");
+                            createAppleId();
+                        });
+                    }).catch(function(error) {
+                        logger.error("加载图片验证码失败");
+                        logger.error(error);
+                        createAppleId();
+                    });
+                }).catch(function(error) {
+                    logger.error("获取邮箱信息异常");
+                    logger.error(error);
+                    createAppleId();
+                });
+            }).catch(function(error) {
+                logger.error("加载" + createPageUrl + "页面超时");
+                createAppleId();
+            });
+        });
+    }).catch(function(err) {
+        logger.error("访问" + createPageUrl + "页面失败");
+        logger.error(err);
+        createAppleId();
+    });
+}
+
+createAppleId();
